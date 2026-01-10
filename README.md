@@ -318,7 +318,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 📞 Quick Links
 
 - **Live Demo**: [https://sun-share-save.lovable.app]
-- **Documentation**: [View Docs](#)
 - **Report Issues**: [GitHub Issues](https://github.com/Sai-dev313/sun-share-save/issues)
 - **Feature Requests**: [GitHub Discussions](#)
 

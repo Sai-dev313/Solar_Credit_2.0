@@ -38,7 +38,7 @@ export default function Index() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground" style={{ minHeight: '24px', minWidth: '80px' }}>Loading...</div>
       </div>
     );
   }

@@ -1,6 +1,17 @@
 @import url("https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@400;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap");
+
+/* Fallback font metrics to reduce layout shift during font loading */
+@font-face {
+  font-family: 'Source Sans Pro Fallback';
+  src: local('Arial');
+  ascent-override: 104%;
+  descent-override: 29%;
+  line-gap-override: 0%;
+  size-adjust: 94%;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -58,7 +69,7 @@ All colors MUST be HSL.
 
     --sidebar: 60 9% 97%;
 
-    --font-sans: 'Source Sans Pro', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    --font-sans: 'Source Sans Pro', 'Source Sans Pro Fallback', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     --font-serif: 'Source Serif Pro', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
     --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 

@@ -25,14 +25,14 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUpWithRole = async (email: string, password: string, fullName: string, role: 'producer' | 'consumer') => {
     const redirectUrl = `${window.location.origin}/`;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: { full_name: fullName }
+        data: { full_name: fullName, role: role }
       }
     });
     return { data, error };
@@ -51,5 +51,5 @@ export function useAuth() {
     return { error };
   };
 
-  return { user, session, loading, signUp, signIn, signOut };
+  return { user, session, loading, signUpWithRole, signIn, signOut };
 }

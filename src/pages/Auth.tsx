@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -25,7 +25,7 @@ export default function Auth() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, signUp, user, loading } = useAuthContext();
+  const { signIn, signUpWithRole, user, loading } = useAuthContext();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -62,7 +62,8 @@ export default function Auth() {
           navigate('/');
         }
       } else {
-        const { data, error } = await signUp(email, password, fullName);
+        // Pass role in signup metadata - trigger will extract it atomically
+        const { error } = await signUpWithRole(email, password, fullName, role);
         if (error) {
           if (error.message?.includes('already registered')) {
             toast({
@@ -77,13 +78,7 @@ export default function Auth() {
               description: error.message
             });
           }
-        } else if (data.user) {
-          // Set user role after signup
-          await supabase
-            .from('profiles')
-            .update({ role })
-            .eq('id', data.user.id);
-          
+        } else {
           toast({ title: 'Account created successfully!' });
           navigate('/');
         }

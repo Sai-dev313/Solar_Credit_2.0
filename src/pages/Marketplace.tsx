@@ -53,10 +53,12 @@ export default function Marketplace() {
       });
     }
 
-    // Fetch listings from public view (no seller_id exposed)
+    // Fetch active listings from the table with RLS protection
+    // RLS policy allows viewing active listings for all authenticated users
     const { data: listingsData } = await supabase
-      .from('marketplace_listings_public')
+      .from('marketplace_listings')
       .select('id, credits_available, price_per_credit')
+      .eq('status', 'active')
       .order('created_at', { ascending: false });
 
     if (listingsData) {

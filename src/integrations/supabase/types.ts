@@ -137,41 +137,11 @@ export type Database = {
             referencedRelation: "marketplace_listings"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "transactions_listing_id_fkey"
-            columns: ["listing_id"]
-            isOneToOne: false
-            referencedRelation: "marketplace_listings_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
     }
     Views: {
-      marketplace_listings_public: {
-        Row: {
-          created_at: string | null
-          credits_available: number | null
-          id: string | null
-          price_per_credit: number | null
-          status: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          credits_available?: number | null
-          id?: string | null
-          price_per_credit?: number | null
-          status?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          credits_available?: number | null
-          id?: string | null
-          price_per_credit?: number | null
-          status?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       create_listing:

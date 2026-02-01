@@ -30,6 +30,15 @@ export default function ProducerDashboard() {
   const [used, setUsed] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const simulateSmartMeterFeed = () => {
+    // Realistic solar generation: 15-35 kWh (varies by weather/season)
+    const randomGenerated = (Math.random() * 20 + 15).toFixed(1);
+    // Realistic home usage: 8-20 kWh (typical household)
+    const randomUsed = (Math.random() * 12 + 8).toFixed(1);
+    setGenerated(randomGenerated);
+    setUsed(randomUsed);
+  };
+
   useEffect(() => {
     if (user) {
       fetchData();
@@ -198,6 +207,17 @@ export default function ProducerDashboard() {
             <CardDescription>Enter your solar generation and home usage</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={simulateSmartMeterFeed}
+                type="button"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Simulate Smart Meter Feed
+              </Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="generated">Power Generated (kWh)</Label>

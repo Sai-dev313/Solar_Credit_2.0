@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Sun, Zap, Battery, Coins, IndianRupee } from 'lucide-react';
+import { Sun, Zap, Battery, Coins, IndianRupee, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatCard } from '@/components/ui/stat-card';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { BillPayment } from '@/components/BillPayment';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -150,6 +151,10 @@ export default function ProducerDashboard() {
     });
   };
 
+  const handlePaymentComplete = (newCredits: number, newCash: number) => {
+    setProfile({ credits: newCredits, cash: newCash });
+  };
+
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-8">
@@ -232,6 +237,18 @@ export default function ProducerDashboard() {
                     <p className="text-xs text-muted-foreground">kWh Sent to Grid</p>
                   </div>
                 </div>
+                
+                {/* Credit Conversion Info */}
+                <div className="border-t border-border pt-3 mt-3">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Energy sent to grid:</span>
+                    <span className="font-semibold">{energyToday.sent_to_grid} units</span>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-bold text-primary">{energyToday.sent_to_grid} credits</span>
+                    <span className="text-xs text-muted-foreground">(1 unit = 1 credit)</span>
+                  </div>
+                </div>
+                
                 <p className="text-sm text-muted-foreground text-center pt-2 border-t border-border">
                   ✓ Today's energy has been logged. Come back tomorrow to log again!
                 </p>
@@ -273,11 +290,20 @@ export default function ProducerDashboard() {
                   </div>
                 </div>
                 {generated && used && (
-                  <p className="text-sm text-muted-foreground">
-                    Extra power to grid: <span className="font-semibold text-primary">
-                      {Math.max(0, parseFloat(generated) - parseFloat(used))} kWh
-                    </span>
-                  </p>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">
+                      Extra power to grid: <span className="font-semibold text-primary">
+                        {Math.max(0, parseFloat(generated) - parseFloat(used))} kWh
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <ArrowRight className="h-3 w-3" />
+                      Equivalent credits: <span className="font-semibold text-primary">
+                        {Math.max(0, parseFloat(generated) - parseFloat(used))} credits
+                      </span>
+                      <span className="text-xs">(1 unit = 1 credit)</span>
+                    </p>
+                  </div>
                 )}
                 <Button onClick={handleLogEnergy} disabled={isLoading || !generated || !used}>
                   Log Energy
@@ -298,7 +324,10 @@ export default function ProducerDashboard() {
               <div>
                 <p className="text-lg">Available to Convert</p>
                 <p className="text-3xl font-bold text-primary">{energyToday.sent_to_grid} kWh</p>
-                <p className="text-sm text-muted-foreground">1 kWh = 1 Credit</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                  <ArrowRight className="h-3 w-3" />
+                  = {energyToday.sent_to_grid} credits (1 kWh = 1 Credit)
+                </p>
               </div>
               <Button 
                 size="lg"
@@ -310,6 +339,14 @@ export default function ProducerDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Bill Payment */}
+        <BillPayment 
+          credits={profile.credits}
+          cash={profile.cash}
+          onPaymentComplete={handlePaymentComplete}
+          isConsumer={false}
+        />
       </div>
     </AppLayout>
   );

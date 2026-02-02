@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Coins, IndianRupee, Receipt, TrendingDown } from 'lucide-react';
+import { Coins, IndianRupee, Receipt, TrendingDown, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { StatCard } from '@/components/ui/stat-card';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { BillPayment } from '@/components/BillPayment';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface Profile {
   credits: number;
@@ -17,10 +16,8 @@ interface Profile {
 
 export default function ConsumerDashboard() {
   const { user } = useAuthContext();
-  const { toast } = useToast();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile>({ credits: 0, cash: 5000 });
-  const [creditsToUse, setCreditsToUse] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   const savingsPerCredit = 2; // ₹2 per credit
   const maxSavings = profile.credits * savingsPerCredit;
@@ -48,48 +45,8 @@ export default function ConsumerDashboard() {
     }
   };
 
-  const handleSaveOnBill = async () => {
-    if (!user) return;
-    
-    const credits = parseFloat(creditsToUse);
-    if (!credits || credits <= 0 || credits > profile.credits) {
-      toast({
-        variant: 'destructive',
-        title: 'Invalid amount',
-        description: 'Please enter a valid number of credits'
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Use atomic RPC function - auth.uid() used server-side
-    const { data, error } = await supabase.rpc('redeem_credits', {
-      p_credits: credits
-    });
-
-    if (error || !data?.[0]?.success) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: data?.[0]?.message || error?.message || 'Failed to redeem credits'
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    const savings = Number(data[0].savings);
-    setProfile(prev => ({
-      credits: prev.credits - credits,
-      cash: prev.cash + savings
-    }));
-    setCreditsToUse('');
-    setIsLoading(false);
-
-    toast({
-      title: 'Bill Reduced!',
-      description: `You saved ₹${savings} on your electricity bill.`
-    });
+  const handlePaymentComplete = (newCredits: number, newCash: number) => {
+    setProfile({ credits: newCredits, cash: newCash });
   };
 
   return (
@@ -150,46 +107,36 @@ export default function ConsumerDashboard() {
           </CardContent>
         </Card>
 
-        {/* Save on Bill */}
-        <Card className="border-primary/30 bg-accent">
-          <CardHeader>
-            <CardTitle>Save on Your Bill</CardTitle>
-            <CardDescription>Use your credits to reduce your electricity bill</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="credits">Credits to Use</Label>
-                  <Input
-                    id="credits"
-                    type="number"
-                    placeholder="e.g., 50"
-                    value={creditsToUse}
-                    onChange={(e) => setCreditsToUse(e.target.value)}
-                    max={profile.credits}
-                  />
+        {/* Buy Credits CTA */}
+        {profile.credits === 0 && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="py-6">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-full bg-primary/10">
+                    <ShoppingCart className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">No credits yet?</h3>
+                    <p className="text-muted-foreground">Buy credits from producers to start saving on your electricity bills!</p>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Available: <span className="font-semibold">{profile.credits} credits</span>
-                </p>
-              </div>
-              <div className="flex flex-col justify-center items-center p-6 rounded-lg bg-background">
-                <p className="text-sm text-muted-foreground">You will save</p>
-                <p className="text-4xl font-bold text-primary">
-                  ₹{((parseFloat(creditsToUse) || 0) * savingsPerCredit).toLocaleString()}
-                </p>
-                <Button 
-                  className="mt-4 w-full"
-                  onClick={handleSaveOnBill}
-                  disabled={isLoading || !creditsToUse || parseFloat(creditsToUse) <= 0 || parseFloat(creditsToUse) > profile.credits}
-                >
-                  Save on Bill
+                <Button onClick={() => navigate('/marketplace')} className="whitespace-nowrap">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Go to Marketplace
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Bill Payment - PhonePe Style */}
+        <BillPayment 
+          credits={profile.credits}
+          cash={profile.cash}
+          onPaymentComplete={handlePaymentComplete}
+          isConsumer={true}
+        />
       </div>
     </AppLayout>
   );

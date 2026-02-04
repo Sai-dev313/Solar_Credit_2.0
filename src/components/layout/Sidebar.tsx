@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Sun, ShoppingCart, User, LogOut, Zap, CreditCard, Receipt } from 'lucide-react';
+import { Sun, User, LogOut, Zap, CreditCard } from 'lucide-react';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ export function Sidebar({ role }: SidebarProps) {
     await signOut();
   };
 
+  // Simplified nav - only Dashboard, Profile
   const navItems = [
     ...(role === 'producer' ? [
       { path: '/dashboard', label: 'Dashboard', icon: Sun }
@@ -23,8 +24,6 @@ export function Sidebar({ role }: SidebarProps) {
     ...(role === 'consumer' ? [
       { path: '/consumer', label: 'Dashboard', icon: CreditCard }
     ] : []),
-    { path: '/marketplace', label: 'Marketplace', icon: ShoppingCart },
-    { path: '/payments', label: 'Payments', icon: Receipt },
     { path: '/profile', label: 'Profile', icon: User },
   ];
 
@@ -76,32 +75,31 @@ export function Sidebar({ role }: SidebarProps) {
             <Zap className="h-6 w-6" />
             <span className="font-bold">SolarCredit</span>
           </Link>
-        </div>
-        <nav className="flex overflow-x-auto px-2 pb-2 gap-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition-colors",
-                location.pathname === item.path
-                  ? "bg-primary-foreground/20 font-semibold"
-                  : "hover:bg-primary-foreground/10"
-              )}
+          <div className="flex items-center gap-2">
+            {navItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "p-2 rounded-lg transition-colors",
+                  location.pathname === item.path
+                    ? "bg-primary-foreground/20"
+                    : "hover:bg-primary-foreground/10"
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+              </Link>
+            ))}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              onClick={handleSignOut}
             >
-              <item.icon className="h-4 w-4" />
-              <span>{item.label}</span>
-            </Link>
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            onClick={handleSignOut}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </nav>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
       </header>
     </>
   );

@@ -24,7 +24,7 @@ export default function ImpactBanner() {
 
         const data = await res.json();
 
-        if (!data.statement || data.total_units_sent_to_grid === 0) {
+        if (!data.statement) {
           setHidden(true);
           return;
         }

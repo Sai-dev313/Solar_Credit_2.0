@@ -172,7 +172,7 @@ Answer this question using ONLY the user's real data provided below. Stay ground
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `${cardInstruction}\n\nUser data:\n${userMessage}` },
         ],
-        max_tokens: 300,
+        max_completion_tokens: 300,
         temperature: 0.6,
       }),
     });

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Leaf } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 
 export function LifetimeImpactPill() {
@@ -33,7 +32,7 @@ export function LifetimeImpactPill() {
     return (
       <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
         <Leaf className="h-5 w-5 text-primary shrink-0" />
-        <Skeleton className="h-4 w-full" />
+        <p className="text-sm text-muted-foreground animate-pulse">Generating your impact...</p>
       </div>
     );
   }

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Leaf } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ImpactBanner() {
   const [statement, setStatement] = useState('');
@@ -52,10 +51,7 @@ export default function ImpactBanner() {
         </div>
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-3/4 bg-gray-700" />
-              <Skeleton className="h-4 w-full bg-gray-700" />
-            </div>
+            <p className="text-sm text-gray-400 animate-pulse">Generating platform impact...</p>
           ) : (
             <>
               <p className="text-sm text-white leading-relaxed whitespace-pre-line">

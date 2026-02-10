@@ -11,9 +11,9 @@ const SYSTEM_PROMPT = `You are SolarGPT, an in-app intelligence layer for SolarC
 
 You do NOT behave like a chatbot.
 You do NOT hold open-ended conversations.
-You ONLY answer the specific question selected by the user.
+You ONLY answer the specific question asked.
 
-Your role is to explain a user's real SolarCredit data in simple, grounded terms.
+Your role is to explain a user's real SolarCredit data in simple, grounded, real-world terms.
 
 RULES (NON-NEGOTIABLE):
 - Use ONLY the data provided to you.
@@ -22,6 +22,7 @@ RULES (NON-NEGOTIABLE):
 - If required data is missing, clearly say so.
 - Do NOT mention AI, LLMs, models, or internal processes.
 - Tone must be clear, explanatory, neutral, and trustworthy.
+- Ground every explanation in real-world energy systems (grid, coal, solar, emissions).
 
 IMPORTANT DISTINCTION:
 - Producers contribute by generating and exporting solar energy to the grid.
@@ -36,24 +37,32 @@ Keep each answer between 4–6 sentences.`;
 const CARD_PROMPTS: Record<number, string> = {
   1: `Question: "How did I earn these credits?"
 For producers: Explain energy → grid → credits. Reference logged energy, explain conversion rule (1 kWh exported = 1 credit), connect to grid export.
-For consumers: Explain purchase → demand → credits. Each credit represents one unit of clean electricity that entered the grid.`,
+Example tone: "Every unit of solar electricity your rooftop sent to the grid earned you one credit. These credits represent real power — power that entered the grid and replaced fossil fuel generation."
+For consumers: Explain purchase → demand → credits. Each credit represents one unit of clean electricity that entered the grid.
+Example tone: "Each credit you purchased represents one unit of solar electricity that a producer sent to the grid. Your purchase directly funded that clean power entering the system."`,
 
   2: `Question: "What's my lifetime impact?"
 Use lifetime_units_contributed_to_grid and cause → effect language. Tie to the grid, not abstract climate claims.
 For producers: Emphasize units sent to grid replacing fossil fuel electricity.
-For consumers: Emphasize enabling solar units to enter the grid through credit purchases. Impact accumulates even if current balance is zero.`,
+Example tone: "Your rooftop has sent X units of clean electricity into India's grid — power that didn't come from coal. That's Y kg of CO₂ that never entered the atmosphere."
+For consumers: Emphasize enabling solar units to enter the grid through credit purchases. Impact accumulates even if current balance is zero.
+Example tone: "You've supported X units of solar power entering the grid. Each unit displaced fossil fuel generation. Your cumulative impact stands regardless of your current credit balance."`,
 
   3: `Question: "What happens if I sell vs use credits?"
 Explain balance change. Explain impact does NOT reset. Separate financial action from lifetime impact.
-If you sell credits, your credit balance decreases and you receive money, but your lifetime contribution remains unchanged. If you use credits to pay bills, you apply their value directly to electricity costs. In both cases, the clean energy contribution has already occurred.`,
+Example tone: "If you sell credits, your balance decreases and you receive money — but the clean energy those credits represent has already entered the grid. Your lifetime contribution doesn't change. If you use credits to pay bills, you apply their value to electricity costs. Either way, the environmental impact is already locked in."`,
 
   4: `Question: "How can I increase my contribution?"
-For producers: Focus on generation behavior - log more solar generation and export surplus to the grid. Contribution grows cumulatively over time. No upsell tone.
-For consumers: Focus on participation - buy or use more clean credits. Each credit supports one unit of solar energy entering the grid. No pressure tone.`,
+For producers: Focus on generation behavior — log more solar generation and export surplus to the grid. Contribution grows cumulatively over time. No upsell tone.
+Example tone: "Generate more solar power and export the surplus. Every unit that enters the grid adds to your lifetime impact. Over months, small daily exports compound into meaningful grid-level change."
+For consumers: Focus on participation — buy or use more clean credits. Each credit supports one unit of solar energy entering the grid. No pressure tone.
+Example tone: "Each credit you buy funds one more unit of solar power on the grid. Your contribution grows with every purchase, shifting the energy mix away from fossil fuels."`,
 
   5: `Question: "Where did my solar energy go?"
 For producers: The solar energy exported enters the local electricity grid and is consumed nearby. Once injected, it mixes with other power sources and helps reduce reliance on fossil fuel generation.
-For consumers: The credits purchased represent solar energy sent to the grid by producers. While you don't receive that exact electricity, your participation helps ensure solar replaces fossil power in the system.`,
+Example tone: "Your solar power entered the local grid the moment it was exported. It mixed with other electricity and was consumed by nearby homes and businesses. That injection reduced the amount of coal-fired power needed at that moment."
+For consumers: The credits purchased represent solar energy sent to the grid by producers. While you don't receive that exact electricity, your participation helps ensure solar replaces fossil power in the system.
+Example tone: "The solar energy behind your credits was injected into the grid by a producer. You didn't receive that exact electricity — but your purchase ensured it was generated. That's how demand for clean power grows."`,
 };
 
 serve(async (req) => {
@@ -67,10 +76,13 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    const { question_id } = await req.json();
-    if (!question_id || !CARD_PROMPTS[question_id]) {
+    const body = await req.json();
+    const { question_id, custom_question } = body;
+    const isCustom = question_id === 0 || !!custom_question;
+
+    if (!isCustom && (!question_id || !CARD_PROMPTS[question_id])) {
       return new Response(
-        JSON.stringify({ error: "Invalid question_id (1-5)" }),
+        JSON.stringify({ error: "Invalid question_id (0-5)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -97,7 +109,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user context
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, credits")
@@ -117,7 +128,6 @@ serve(async (req) => {
         .eq("user_id", user.id);
       lifetimeUnits = (energyData || []).reduce((sum, r) => sum + (Number(r.sent_to_grid) || 0), 0);
 
-      // Money earned from marketplace sales
       const { data: salesData } = await supabase
         .from("transactions")
         .select("total_price")
@@ -140,7 +150,15 @@ serve(async (req) => {
       total_money_saved_or_earned: Math.round(totalMoneyEarned),
     });
 
-    const cardInstruction = CARD_PROMPTS[question_id];
+    let cardInstruction: string;
+    if (isCustom) {
+      const questionText = custom_question || body.custom_question || "";
+      cardInstruction = `The user asked a custom question: "${questionText}"
+
+Answer this question using ONLY the user's real data provided below. Stay grounded in real-world energy systems. If the question cannot be answered with the available data, say so clearly. Do not speculate or invent information. Keep the answer 4–6 sentences, factual, and tied to the grid/solar/emissions context.`;
+    } else {
+      cardInstruction = CARD_PROMPTS[question_id];
+    }
 
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -149,13 +167,13 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-5.2",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `${cardInstruction}\n\nUser data:\n${userMessage}` },
         ],
-        max_tokens: 250,
-        temperature: 0.4,
+        max_tokens: 300,
+        temperature: 0.6,
       }),
     });
 

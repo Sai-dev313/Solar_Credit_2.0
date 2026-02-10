@@ -1,114 +1,97 @@
 
 
-# Fix Energy Logging, Data Persistence, and Impact Snapshot
+# UI Improvements: Dashboard, Marketplace, Bill Payment, and Receipt
 
-## Problems Identified
+## Summary of Changes
 
-1. **Data resets on refresh**: The `earn_credits()` database function sets `sent_to_grid = 0` after converting to credits. This means on page refresh, the UI reads 0 from the database -- losing the original values. The `credits_converted` state only lives in React memory.
+This plan covers 7 distinct fixes across multiple files. No Stripe integration for now -- we'll keep the simulated UPI flow.
 
-2. **Impact snapshot shows 0**: Because `earn_credits()` zeroes out `sent_to_grid`, the snapshot aggregation `SUM(sent_to_grid)` across all users returns 0.
+---
 
-3. **No input validation for manual entry**: Users can enter unrealistic values (e.g., 1000 kWh generated) or values where "used" exceeds "generated", which makes no sense for solar producers.
+## 1. Producer Dashboard: Cash Balance Changes
 
-## Root Cause
+**File:** `src/pages/ProducerDashboard.tsx`
 
-The `earn_credits()` function does `UPDATE energy_logs SET sent_to_grid = 0` after conversion. This destroys the original data. Instead, we need a separate flag to track conversion status.
+- Set initial cash to `0` instead of `5000` in the default state
+- Rename "Cash Balance" label to "Earned by Credits (Rs.)"
+- Round credits display to nearest whole number using `Math.round()`
 
-## Solution
+## 2. Consumer Dashboard: Update Credit Value
 
-### 1. Database: Add `credits_converted` column to `energy_logs`
+**File:** `src/pages/ConsumerDashboard.tsx`
 
-```sql
-ALTER TABLE energy_logs ADD COLUMN credits_converted boolean NOT NULL DEFAULT false;
-```
+- Change `profile.credits * 2` to `profile.credits * 3` for potential savings display
+- Round credits display to nearest whole number
 
-This preserves `sent_to_grid` values permanently while tracking whether credits were already earned.
+## 3. Credit-to-Rupee Offset: 1 Credit = Rs.3 (everywhere)
 
-### 2. Database: Fix `earn_credits()` function
+Update all references from Rs.2 to Rs.3:
 
-Change from resetting `sent_to_grid = 0` to setting `credits_converted = true`:
+| File | Change |
+|------|--------|
+| `src/components/BillPayment.tsx` | `savingsPerCredit = 3` |
+| `src/components/dashboard/DashboardInfoCard.tsx` | "1 Credit = Rs.3 savings" (two places) |
+| `src/components/home/FAQSection.tsx` | "1 credit = Rs.3 savings on your bill" |
+| Database: `pay_bill` function | `v_credit_savings := p_credits_to_use * 3` |
 
-- Check `credits_converted = false` before allowing conversion
-- Set `credits_converted = true` instead of zeroing `sent_to_grid`
-- The original `sent_to_grid` value stays intact for aggregation and display
+## 4. Marketplace: Price Per Credit Limit (Rs.0.50 - Rs.2.50)
 
-### 3. Database: Fix `log_energy()` function -- add validation
+**File:** `src/components/dashboard/panels/ProducerMarketplacePanel.tsx`
 
-- Reject if `generated < used` (for manual entries, generated must be >= used)
-- Keep the existing max 10,000 kWh cap
+- Add min/max validation on the price input field (`min="0.50"` `max="2.50"`)
+- Show a warning if user enters a value outside the range
+- Disable "List for Sale" button if price is out of range
+- Update the `create_listing` database function to enforce the range server-side as well
 
-### 4. Frontend: Update `ProducerDashboard.tsx` -- read `credits_converted` from DB
+## 5. Consumer Number: 10-Digit Numeric Validation
 
-Change the energy log fetch to also select `credits_converted`:
+**File:** `src/components/BillPayment.tsx`
 
-```typescript
-.select('generated, used, sent_to_grid, credits_converted')
-```
+- Set `maxLength={10}` on the consumer number input
+- Filter input to only allow digits (strip non-numeric characters on change)
+- Show warning text if non-numeric characters are attempted or length is not exactly 10
+- Disable "Fetch Bill" button until exactly 10 digits are entered
 
-This way the conversion state survives refresh and navigation.
+## 6. Slider Visibility Fix
 
-### 5. Frontend: Update `LogEnergyPanel.tsx` -- add input validation warnings
+**File:** `src/components/ui/slider.tsx`
 
-- Show a warning when `generated < used` (power generated must be greater than or equal to power used)
-- Disable the "Log Energy" button if validation fails
-- Keep smart meter feed exempt (auto-generated values are always valid)
+The slider track and thumb may not be visible due to the `bg-secondary` color blending with the muted background. Fix:
 
-### 6. Impact snapshot will auto-fix
+- Add explicit styling to ensure the slider track and range are visible against the muted card background
+- Make the thumb more prominent with a visible border/shadow
 
-Since `sent_to_grid` will no longer be zeroed out, the existing trigger on `energy_logs` will correctly aggregate all units across all producers.
+## 7. Download Receipt as PDF
+
+**File:** `src/components/BillPayment.tsx`
+
+Implement a client-side receipt download that generates a text/HTML file:
+
+- Wire up the existing "Download Receipt" button
+- Generate a formatted HTML receipt with all payment details
+- Use `window.open` + `document.write` or create a Blob to trigger a download
+- Include receipt ID, date, provider, consumer name, bill amount, credits applied, and UPI paid amount
+
+---
 
 ## Technical Details
 
-### Modified Files
+### Database Migration
 
-| File | Action | Description |
-|------|--------|-------------|
-| Database migration | Create | Add `credits_converted` column, fix `earn_credits()`, fix `log_energy()` |
-| `src/pages/ProducerDashboard.tsx` | Modify | Read `credits_converted` from DB instead of inferring it |
-| `src/components/dashboard/panels/LogEnergyPanel.tsx` | Modify | Add validation: generated must be >= used, show warning |
+A new migration to:
+1. Update `pay_bill` function: change `p_credits_to_use * 2` to `p_credits_to_use * 3`
+2. Update `create_listing` function: add price validation (`p_price_per_credit BETWEEN 0.5 AND 2.5`)
 
-### Database Function Changes
+### Files Modified
 
-**`earn_credits()` -- before:**
-```sql
-UPDATE energy_logs SET sent_to_grid = 0 WHERE id = v_energy_log.id;
-```
-
-**`earn_credits()` -- after:**
-```sql
--- Check not already converted
-IF v_energy_log.credits_converted THEN
-  RETURN QUERY SELECT false, 'Credits already earned today', 0;
-  RETURN;
-END IF;
--- Mark as converted (keep sent_to_grid intact)
-UPDATE energy_logs SET credits_converted = true WHERE id = v_energy_log.id;
-```
-
-**`log_energy()` -- add validation:**
-```sql
-IF p_generated < p_used THEN
-  RETURN QUERY SELECT false, 'Generated energy must be >= used energy', 0;
-  RETURN;
-END IF;
-```
-
-### Frontend Validation (LogEnergyPanel)
-
-- When user manually enters values, show a red warning if `generated < used`
-- Disable "Log Energy" button when invalid
-- Smart meter simulation always produces valid values (generated > used)
-
-### Data Fix
-
-Also run a one-time update to fix the existing `energy_logs` rows where `sent_to_grid` was incorrectly zeroed but energy was actually generated:
-
-```sql
-UPDATE energy_logs 
-SET sent_to_grid = GREATEST(0, generated - used),
-    credits_converted = true
-WHERE sent_to_grid = 0 AND generated > used;
-```
-
-This restores the correct `sent_to_grid` values and marks them as already converted, which will also fix the `platform_impact_snapshot` totals via the trigger.
+| File | Changes |
+|------|---------|
+| `src/pages/ProducerDashboard.tsx` | Initial cash = 0, rename label, round credits |
+| `src/pages/ConsumerDashboard.tsx` | Update savings multiplier to 3, round credits |
+| `src/components/BillPayment.tsx` | savingsPerCredit = 3, consumer number validation (10-digit numeric only), download receipt functionality |
+| `src/components/dashboard/panels/ProducerMarketplacePanel.tsx` | Price range validation 0.50-2.50 |
+| `src/components/dashboard/DashboardInfoCard.tsx` | Update "Rs.2" to "Rs.3" text |
+| `src/components/home/FAQSection.tsx` | Update "Rs.2" to "Rs.3" text |
+| `src/components/ui/slider.tsx` | Improve track/thumb visibility |
+| Database migration | Update `pay_bill` and `create_listing` functions |
 

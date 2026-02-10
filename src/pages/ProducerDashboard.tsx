@@ -57,7 +57,7 @@ export default function ProducerDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const { data: energyData } = await supabase
       .from('energy_logs')
-      .select('generated, used, sent_to_grid')
+      .select('generated, used, sent_to_grid, credits_converted')
       .eq('user_id', user.id)
       .eq('log_date', today)
       .maybeSingle();
@@ -67,7 +67,7 @@ export default function ProducerDashboard() {
         generated: Number(energyData.generated) || 0,
         used: Number(energyData.used) || 0,
         sent_to_grid: Number(energyData.sent_to_grid) || 0,
-        credits_converted: Number(energyData.sent_to_grid) === 0 && Number(energyData.generated) > 0
+        credits_converted: Boolean(energyData.credits_converted)
       });
     }
   };

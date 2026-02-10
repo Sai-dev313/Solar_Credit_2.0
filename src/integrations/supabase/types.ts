@@ -68,6 +68,7 @@ export type Database = {
       energy_logs: {
         Row: {
           created_at: string | null
+          credits_converted: boolean
           generated: number | null
           id: string
           log_date: string | null
@@ -77,6 +78,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          credits_converted?: boolean
           generated?: number | null
           id?: string
           log_date?: string | null
@@ -86,6 +88,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          credits_converted?: boolean
           generated?: number | null
           id?: string
           log_date?: string | null

@@ -72,7 +72,10 @@ export function LogEnergyPanel({ energyToday, onEnergyLogged }: LogEnergyPanelPr
   };
 
   const isAlreadyLogged = energyToday.generated > 0;
-  const excessEnergy = parseFloat(generated) - parseFloat(used);
+  const genVal = parseFloat(generated);
+  const useVal = parseFloat(used);
+  const excessEnergy = genVal - useVal;
+  const isInvalidManualEntry = generated !== '' && used !== '' && !isNaN(genVal) && !isNaN(useVal) && genVal < useVal;
 
   return (
     <Card>
@@ -158,7 +161,14 @@ export function LogEnergyPanel({ energyToday, onEnergyLogged }: LogEnergyPanelPr
                 />
               </div>
             </div>
-            {generated && used && !isNaN(excessEnergy) && (
+            {isInvalidManualEntry && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                <p className="text-sm text-destructive font-medium">
+                  ⚠ Power generated must be greater than or equal to power used at home. Please enter valid values.
+                </p>
+              </div>
+            )}
+            {generated && used && !isNaN(excessEnergy) && !isInvalidManualEntry && (
               <div className="p-3 rounded-lg bg-muted/50">
                 <p className="text-sm text-muted-foreground">
                   Extra power to grid: <span className="font-semibold text-primary">
@@ -174,7 +184,7 @@ export function LogEnergyPanel({ energyToday, onEnergyLogged }: LogEnergyPanelPr
                 </p>
               </div>
             )}
-            <Button onClick={handleLogEnergy} disabled={isLoading || !generated || !used}>
+            <Button onClick={handleLogEnergy} disabled={isLoading || !generated || !used || isInvalidManualEntry}>
               Log Energy
             </Button>
           </>

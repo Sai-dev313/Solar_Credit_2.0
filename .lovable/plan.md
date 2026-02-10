@@ -1,103 +1,117 @@
 
 
-# Google OAuth Role Selection Flow
+# Platform Impact Banner on Login Page (OpenAI-Powered)
 
-## Problem Summary
+## Overview
 
-When users sign up via Google OAuth, they bypass the role selection that email signup users see. The database trigger assigns a default role of `'consumer'`, and the user is immediately routed to the Consumer Dashboard without ever choosing their role.
+Add a live impact banner above the login card that displays AI-narrated platform metrics (total grid exports, CO2 avoided, trees equivalent). The AI (OpenAI) only narrates pre-computed data -- it never calculates anything.
 
-## Solution Overview
+---
 
-Add an intermediate role selection step after Google OAuth sign-in for new users who haven't explicitly selected a role.
+## Architecture
 
 ```text
-Google Sign-in
-     |
-     v
-Check: was role explicitly selected?
-     |
-     +---> NO  --> Redirect to /select-role
-     |
-     +---> YES --> Redirect to correct dashboard
+platform_impact_snapshot (1 row)
+        |
+        v
+Edge Function: generate-impact-statement
+  - Reads snapshot from DB
+  - Sends data to OpenAI with exact system prompt
+  - Returns 2-line narration
+        |
+        v
+Auth.tsx: ImpactBanner component
+  - Calls edge function on mount
+  - Displays narrated text above login card
+  - Shows loading skeleton / fallback
 ```
 
 ---
 
-## Implementation Plan
+## Implementation Steps
 
-### 1. Database Change: Track Role Selection Source
+### 1. Collect OpenAI API Key
 
-Add a boolean column `role_selected` to the `profiles` table to distinguish between:
-- Users who explicitly chose their role (email signup or role selection page) = `true`
-- Users who received the default role (Google OAuth) = `false` or `null`
+Prompt you to enter your OpenAI API key as a backend secret (`OPENAI_API_KEY`).
 
-**SQL Migration:**
+### 2. Database: Create `platform_impact_snapshot` table
+
 ```sql
--- Add column to track if role was explicitly selected
-ALTER TABLE public.profiles 
-ADD COLUMN role_selected boolean DEFAULT false;
+CREATE TABLE public.platform_impact_snapshot (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  total_units_sent_to_grid numeric NOT NULL DEFAULT 0,
+  total_co2_avoided_kg numeric NOT NULL DEFAULT 0,
+  equivalent_trees integer NOT NULL DEFAULT 0,
+  last_updated_at timestamptz NOT NULL DEFAULT now()
+);
 
--- Update trigger to set role_selected based on whether role was provided
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  INSERT INTO public.profiles (id, full_name, credits, cash, role, role_selected)
-  VALUES (
-    NEW.id, 
-    NEW.raw_user_meta_data->>'full_name', 
-    0, 
-    5000, 
-    COALESCE(NEW.raw_user_meta_data->>'role', 'consumer'),
-    -- role_selected is true if role was explicitly provided in metadata
-    (NEW.raw_user_meta_data->>'role') IS NOT NULL
-  );
-  RETURN NEW;
-END;
-$$;
+ALTER TABLE public.platform_impact_snapshot ENABLE ROW LEVEL SECURITY;
+
+-- Public read so the edge function (and unauthenticated login page) can read it
+CREATE POLICY "Anyone can read impact snapshot"
+  ON public.platform_impact_snapshot FOR SELECT
+  USING (true);
+
+-- Seed with initial data
+INSERT INTO public.platform_impact_snapshot
+  (total_units_sent_to_grid, total_co2_avoided_kg, equivalent_trees, last_updated_at)
+VALUES (0, 0, 0, now());
 ```
 
-### 2. Create Role Selection Page
+### 3. Database Function: Auto-refresh snapshot
 
-**New file: `src/pages/SelectRole.tsx`**
+Create a function that recalculates the snapshot from `energy_logs.sent_to_grid`:
 
-UI Design:
-- Title: "How will you use SolarCredit?"
-- Two prominent cards:
-  - Producer card (sun icon): "I generate solar power"
-  - Consumer card (house icon): "I use clean energy"
-- Selecting a card updates the profile and redirects to the appropriate dashboard
+```sql
+CREATE OR REPLACE FUNCTION public.refresh_impact_snapshot()
+RETURNS void AS $$
+DECLARE
+  total_units numeric;
+  co2_kg numeric;
+  trees int;
+BEGIN
+  SELECT COALESCE(SUM(sent_to_grid), 0) INTO total_units FROM public.energy_logs;
+  co2_kg := total_units * 0.82;  -- deterministic emission factor
+  trees := FLOOR(co2_kg / 22);   -- each tree absorbs ~22kg CO2/year
 
-Features:
-- Protected route (requires authentication)
-- Updates `profiles.role` and sets `role_selected = true`
-- Shows loading state during update
-- Redirects to Producer Dashboard (`/dashboard`) or Consumer Dashboard (`/consumer`)
+  UPDATE public.platform_impact_snapshot
+  SET total_units_sent_to_grid = total_units,
+      total_co2_avoided_kg = co2_kg,
+      equivalent_trees = trees,
+      last_updated_at = now();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
 
-### 3. Update App Routing
+A trigger on `energy_logs` INSERT will call this function automatically.
 
-**Modify: `src/App.tsx`**
-- Add new route: `/select-role` pointing to `SelectRole` component
+### 4. Edge Function: `generate-impact-statement`
 
-### 4. Update Google OAuth Redirect Logic
+New file: `supabase/functions/generate-impact-statement/index.ts`
 
-**Modify: `src/pages/Auth.tsx`**
-- After successful Google sign-in, redirect to `/` (home page)
-- The home page will handle the role check
+- Reads the single row from `platform_impact_snapshot`
+- Sends the exact system prompt you specified to OpenAI's chat completions API
+- Passes the 4 numeric values as user message
+- Returns the 2-line narration as JSON
+- No streaming needed (short response)
+- Uses your `OPENAI_API_KEY` secret
 
-**Modify: `src/pages/Index.tsx`**
-- Update the `checkRole` function to also check `role_selected`
-- If authenticated user has `role_selected = false`, redirect to `/select-role`
-- If `role_selected = true`, redirect to the appropriate dashboard
+### 5. Update Login Page UI
 
-### 5. Update AppLayout for Dashboard Protection
+Modify `src/pages/Auth.tsx`:
 
-**Modify: `src/components/layout/AppLayout.tsx`**
-- Add check for `role_selected` status
-- If user hasn't selected a role, redirect to `/select-role` before showing dashboard
+- Add an `ImpactBanner` component displayed above the login card
+- Dark/green rounded banner matching the mockup design:
+  - Green circle icon (leaf/zap) on the left
+  - AI-generated impact text
+  - Subtle "Updated moments ago" micro-label
+- Calls the edge function on page load
+- Shows a skeleton loader while fetching
+- Gracefully hides if the fetch fails or data is zero
+
+### 6. Update `supabase/config.toml`
+
+Register the new edge function with `verify_jwt = false` (login page is unauthenticated).
 
 ---
 
@@ -105,75 +119,28 @@ Features:
 
 | File | Action | Description |
 |------|--------|-------------|
-| Database migration | Create | Add `role_selected` column, update trigger |
-| `src/pages/SelectRole.tsx` | Create | New role selection page with Producer/Consumer cards |
-| `src/App.tsx` | Modify | Add `/select-role` route |
-| `src/pages/Index.tsx` | Modify | Check `role_selected` and redirect appropriately |
-| `src/components/layout/AppLayout.tsx` | Modify | Guard dashboards against users without role selection |
+| Secret: `OPENAI_API_KEY` | Add | Your OpenAI API key |
+| Database migration | Create | `platform_impact_snapshot` table, seed row, refresh function, trigger |
+| `supabase/functions/generate-impact-statement/index.ts` | Create | Edge function calling OpenAI |
+| `src/pages/Auth.tsx` | Modify | Add ImpactBanner above login card |
 
 ---
 
-## User Flow After Implementation
+## Design Details (from mockup)
 
-### Email Signup Flow (unchanged):
-1. User fills form, selects role (Producer/Consumer)
-2. Role passed in metadata -> trigger sets `role_selected = true`
-3. Verify email -> Login -> Correct dashboard
-
-### Google OAuth Flow (new):
-1. User clicks "Continue with Google"
-2. Google authenticates -> profile created with `role_selected = false`
-3. Redirect to `/select-role`
-5. User chooses Producer or Consumer
-6. Profile updated with `role_selected = true`
-7. Redirect to correct dashboard
-
-### Returning Google OAuth Users:
-1. User signs in with Google
-2. Ask for which account to be used
-3. Profile already has `role_selected = true`
-4. Direct redirect to their dashboard (no role selection shown)
-5. If not it redirects to `/select-role`
+- Banner sits at the very top of the page, above the login card
+- Dark background (`bg-gray-900`) with rounded corners, centered text
+- Green circle icon on the left side
+- White text for the impact statement
+- Plant emoji at the end
+- Full width with padding, max-width constrained
 
 ---
 
-## Technical Details
+## Security Notes
 
-### SelectRole Page Component Structure:
-```text
-SelectRole
-├── Auth check (redirect to /auth if not logged in)
-├── Role check (redirect to dashboard if already selected)
-├── UI
-│   ├── Title: "How will you use SolarCredit?"
-│   ├── Producer Card
-│   │   ├── Sun icon
-│   │   ├── "For Solar Producers"
-│   │   └── Bullet points matching existing design
-│   └── Consumer Card
-│       ├── Diamond icon
-│       ├── "For Consumers"
-│       └── Bullet points matching existing design
-└── Submit handler
-    ├── Update profile (role, role_selected)
-    └── Navigate to dashboard
-```
-
-### Database Query Pattern:
-```typescript
-// Check if role was selected
-const { data } = await supabase
-  .from('profiles')
-  .select('role, role_selected')
-  .eq('id', user.id)
-  .maybeSingle();
-
-if (!data?.role_selected) {
-  navigate('/select-role');
-} else if (data.role === 'producer') {
-  navigate('/dashboard');
-} else {
-  navigate('/consumer');
-}
-```
+- `OPENAI_API_KEY` is stored as a backend secret, never exposed to the client
+- The edge function is public (no JWT required) since the login page is unauthenticated
+- The snapshot table is read-only for public access
+- AI never calculates metrics -- all numbers come from the pre-computed snapshot
 

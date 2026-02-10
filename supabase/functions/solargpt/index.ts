@@ -76,11 +76,29 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    const body = await req.json();
-    const { question_id, custom_question } = body;
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const question_id = typeof body.question_id === "number" ? body.question_id : undefined;
+    const custom_question = typeof body.custom_question === "string" ? body.custom_question : "";
     const isCustom = question_id === 0 || !!custom_question;
 
-    if (!isCustom && (!question_id || !CARD_PROMPTS[question_id])) {
+    // Validate custom question length
+    if (isCustom && custom_question && custom_question.length > 500) {
+      return new Response(
+        JSON.stringify({ error: "Question too long (max 500 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!isCustom && (question_id === undefined || !CARD_PROMPTS[question_id])) {
       return new Response(
         JSON.stringify({ error: "Invalid question_id (0-5)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -152,7 +170,7 @@ serve(async (req) => {
 
     let cardInstruction: string;
     if (isCustom) {
-      const questionText = custom_question || body.custom_question || "";
+      const questionText = custom_question.substring(0, 500).replace(/[<>]/g, "");
       cardInstruction = `The user asked a custom question: "${questionText}"
 
 Answer this question using ONLY the user's real data provided below. Stay grounded in real-world energy systems. If the question cannot be answered with the available data, say so clearly. Do not speculate or invent information. Keep the answer 4–6 sentences, factual, and tied to the grid/solar/emissions context.`;
@@ -193,7 +211,7 @@ Answer this question using ONLY the user's real data provided below. Stay ground
   } catch (error) {
     console.error("solargpt error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "Something went wrong. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
